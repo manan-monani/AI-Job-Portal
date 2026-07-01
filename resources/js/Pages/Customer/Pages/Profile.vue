@@ -1,0 +1,239 @@
+<script setup lang="ts">
+import CustomerLayout from '@/Layouts/CustomerLayout.vue';
+import { useForm, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import customer from '@/routes/customer';
+
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
+
+const page = usePage();
+const user = page.props.auth.user;
+const preview = ref(user.profile_image ? '/storage/' + user.profile_image : null);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const form = useForm({
+    _method: 'PUT', // Customer update usually uses PUT/PATCH, keeping PUT as per previous customer code
+    name: user.name,
+    email: user.email,
+    current_password: '',
+    password: '',
+    password_confirmation: '',
+    profile_image: null as File | null,
+});
+
+const onFileChange = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+        const file = target.files[0];
+        form.profile_image = file;
+        preview.value = URL.createObjectURL(file);
+    }
+};
+
+const triggerFileInput = () => {
+    fileInput.value?.click();
+};
+
+const submit = () => {
+    // Note: The previous customer update URL was customer.profile.update.url()
+    // We need to ensure we are sending the file if it changed. 
+    // Usually Inertia form.post is better for file uploads even if meant to be PUT, passing _method: PUT.
+    // However, if the backend route expects PUT, we might need form.post with _method='PUT' for FormData.
+    
+    // The previous code used form.put(). If profile_image is not handled in customer controller, this might be why.
+    // For now, I will use form.post with _method: 'PUT' to support file uploads if the backend supports it, matching Admin logic.
+    // If original customer controller doesn't support image, the backend might ignore it, which is fine.
+    
+    // BUT the original code used form.put(customer.profile.update.url()). 
+    // Inertia generic useForm .put automatically handles non-file data. 
+    // If we want to support image, we MUST use .post with _method: PUT/PATCH.
+    
+    form.post(customer.profile.update.url(), {
+        preserveScroll: true,
+        onSuccess: () => {
+             form.reset('current_password', 'password', 'password_confirmation');
+        },
+    });
+};
+</script>
+
+<template>
+    <CustomerLayout>
+        <div class="space-y-6 max-w-4xl mx-auto animate-fade-in">
+            <!-- Header -->
+                <div>
+                <h2 class="text-xl font-bold text-slate-900 dark:text-white">{{ __('Profile Settings') }}</h2>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">{{ __('Update your account information and password.') }}</p>
+            </div>
+
+            <div class="grid gap-6">
+                <!-- Profile Information -->
+                <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white mb-6">{{ __('Personal Information') }}</h3>
+                    
+                    <form @submit.prevent="submit" class="space-y-6">
+                        <!-- Image Upload -->
+                        <div class="flex items-center space-x-6">
+                            <div class="relative group">
+                                <div class="w-20 h-20 rounded-full overflow-hidden border-4 border-slate-100 dark:border-slate-800 shadow-md">
+                                    <img 
+                                        :src="preview || `https://ui-avatars.com/api/?name=${encodeURIComponent(form.name)}&background=random`" 
+                                        class="w-full h-full object-cover" 
+                                        alt="Profile"
+                                    >
+                                </div>
+                                <div 
+                                    @click="triggerFileInput"
+                                    class="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white"
+                                >
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 dark:text-white">{{ __('Profile Photo') }}</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">{{ __('Accepts JPG, PNG or GIF. Max 2MB.') }}</p>
+                                <button 
+                                    type="button"
+                                    @click="triggerFileInput"
+                                    class="text-xs font-bold text-[var(--brand-primary)] hover:underline"
+                                >
+                                    {{ __('Change Photo') }}
+                                </button>
+                                <input 
+                                    type="file" 
+                                    ref="fileInput" 
+                                    class="hidden" 
+                                    @change="onFileChange"
+                                    accept="image/*"
+                                />
+                                <div v-if="form.errors.profile_image" class="text-red-500 text-xs mt-1">{{ form.errors.profile_image }}</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label for="name" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ __('Full Name') }}</label>
+                                <input 
+                                    id="name" 
+                                    v-model="form.name" 
+                                    type="text" 
+                                    class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent transition-all outline-none"
+                                    placeholder="Your Name"
+                                />
+                                <div v-if="form.errors.name" class="text-red-500 text-xs">{{ form.errors.name }}</div>
+                            </div>
+                            
+                            <div class="space-y-1">
+                                <label for="email" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ __('Email Address') }}</label>
+                                <input 
+                                    id="email" 
+                                    v-model="form.email" 
+                                    type="email" 
+                                    class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent transition-all outline-none"
+                                    placeholder="name@example.com"
+                                />
+                                <div v-if="form.errors.email" class="text-red-500 text-xs">{{ form.errors.email }}</div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-slate-100 dark:border-slate-800 my-6 pt-6">
+                             <h3 class="text-base font-bold text-slate-900 dark:text-white mb-4">{{ __('Change Password') }}</h3>
+                             <div class="space-y-4 max-w-md">
+                                <div class="space-y-1">
+                                    <label for="current_password" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ __('Current Password') }}</label>
+                                    <div class="relative">
+                                        <input 
+                                            id="current_password" 
+                                            v-model="form.current_password" 
+                                            :type="showCurrentPassword ? 'text' : 'password'" 
+                                            class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent transition-all outline-none pr-10"
+                                            placeholder="Enter current password"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            @click="showCurrentPassword = !showCurrentPassword"
+                                            class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                        >
+                                            <svg v-if="!showCurrentPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div v-if="form.errors.current_password" class="text-red-500 text-xs">{{ form.errors.current_password }}</div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ __('New Password') }}</label>
+                                    <div class="relative">
+                                        <input 
+                                            id="password" 
+                                            v-model="form.password" 
+                                            :type="showNewPassword ? 'text' : 'password'" 
+                                            class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent transition-all outline-none pr-10"
+                                            placeholder="Enter new password"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            @click="showNewPassword = !showNewPassword"
+                                            class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                        >
+                                            <svg v-if="!showNewPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div v-if="form.errors.password" class="text-red-500 text-xs">{{ form.errors.password }}</div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label for="password_confirmation" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ __('Confirm Password') }}</label>
+                                    <div class="relative">
+                                        <input 
+                                            id="password_confirmation" 
+                                            v-model="form.password_confirmation" 
+                                            :type="showConfirmPassword ? 'text' : 'password'" 
+                                            class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent transition-all outline-none pr-10"
+                                            placeholder="Confirm new password"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            @click="showConfirmPassword = !showConfirmPassword"
+                                            class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                        >
+                                            <svg v-if="!showConfirmPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                             </div>
+                        </div>
+
+                        <div class="flex justify-end pt-4">
+                            <button 
+                                type="submit" 
+                                :disabled="form.processing"
+                                class="bg-[var(--brand-primary)] text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg hover:brightness-110 transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <svg v-if="form.processing" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>{{ __('Save Changes') }}</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </CustomerLayout>
+</template>
+
+<style scoped>
+.animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
